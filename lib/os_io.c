@@ -5603,7 +5603,11 @@ ___BOOL blocking;)
 
 #ifdef FIONBIO
 
+#ifdef USE_WIN32
   unsigned long param = !blocking;
+#else
+  int param = !blocking;
+#endif
 
   return SOCKET_CALL_ERROR(IOCTL_SOCKET(s, FIONBIO, &param));
 
@@ -6948,7 +6952,7 @@ typedef struct ___device_event_queue_struct
   {
     ___device base;
 
-    int index;
+    int selector;
 
 #ifdef USE_WIN32
 
@@ -7103,6 +7107,8 @@ ___SCMOBJ selector;)
   d->base.close_direction = 0; /* prevent closing on errors */
   d->base.read_stage = ___STAGE_OPEN;
   d->base.write_stage = ___STAGE_CLOSED;
+
+  d->selector = ___INT(selector);
 
 #ifdef USE_WIN32
 

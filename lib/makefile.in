@@ -1,10 +1,10 @@
 # makefile for Gambit library.
 
-# Copyright (c) 1994-2020 by Marc Feeley, All Rights Reserved.
+# Copyright (c) 1994-2021 by Marc Feeley, All Rights Reserved.
 
 herefromroot = lib
 rootfromhere = ..
-SUBDIRS = @RTLIBSUBSYS@ _define-library _digest _geiser _git _hamt _http _match _pkg _tar _test _uri _zlib gambit scheme termite srfi
+SUBDIRS = @RTLIBSUBSYS@ _define-library _digest _geiser _git _hamt _http _match _pkg _six _tar _test _uri _zlib gambit scheme termite srfi
 
 PACKAGE_SHORTNAME = @PACKAGE_SHORTNAME@
 PACKAGE_NAME = @PACKAGE_NAME@
@@ -214,7 +214,7 @@ $(GAMBIT_LIB_java): $(UNIVLIB) $(MODULES_SCM)
 GAMBIT_LIB_js: $(GAMBIT_LIB_js)
 
 $(GAMBIT_LIB_js): $(UNIVLIB) $(MODULES_SCM)
-	@SETDLPATHBOOT@ $(rootfromhere)/gsc/gsc@exe@ -:~~bin=$(srcdirpfx)$(rootfromhere)/bin,~~lib=$(srcdirpfx)$(rootfromhere)/lib,~~include=$(srcdirpfx)$(rootfromhere)/include -f -target js @COMPILATION_OPTIONS@ $(PRELUDE_OPT) -c -o $@ $(srcdirpfx)$(rootfromhere)/lib/_univlib.scm
+	@SETDLPATHBOOT@ $(rootfromhere)/gsc/gsc@exe@ -:~~bin=$(srcdirpfx)$(rootfromhere)/bin,~~lib=$(srcdirpfx)$(rootfromhere)/lib,~~include=$(srcdirpfx)$(rootfromhere)/include -f -target js @COMPILATION_OPTIONS@ $(PRELUDE_OPT) -label-namespace "" -c -o $@ $(srcdirpfx)$(rootfromhere)/lib/_univlib.scm
 
 GAMBIT_LIB_php: $(GAMBIT_LIB_php)
 

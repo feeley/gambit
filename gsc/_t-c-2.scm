@@ -191,7 +191,7 @@
     (targ-emit
       (list "JUMPPRM"
             '("NOTHING")
-            (targ-opnd (make-reg 0))))
+            (targ-opnd return-addr-reg)))
 
 ;;    (targ-repr-exit-block! #f)
 
@@ -546,7 +546,7 @@
   (set! targ-proc-entry-frame
     (and prev-gvm-instr (gvm-instr-frame prev-gvm-instr)))
 
-;;  (write-gvm-instr gvm-instr ##stdout)(newline);*************
+;;  (write-gvm-instr gvm-instr (current-output-port))(newline);*************
 
   (if targ-track-scheme-option?
     (let* ((src (node-source targ-proc-instr-node))
@@ -1248,9 +1248,15 @@
 
 (define (targ-gen-jump opnd ret nb-args poll? safe? next-lbl)
 
-  (if ret
-      (targ-emit
-       (targ-loc (make-reg 0) (targ-opnd (make-lbl ret)))))
+  (if ret ;; a return address needs to be passed?
+      (begin
+        (if (eqv? opnd return-addr-reg) ;; destination in location of ret addr?
+            (let ((spare-reg (make-reg (+ (targ-nb-arg-regs) 1))))
+              (targ-emit
+               (targ-loc spare-reg (targ-opnd opnd)))
+              (set! opnd spare-reg)))
+        (targ-emit
+         (targ-loc return-addr-reg (targ-opnd (make-lbl ret))))))
 
   (targ-update-fr targ-proc-entry-frame)
 

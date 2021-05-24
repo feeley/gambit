@@ -146,8 +146,8 @@
            (##raise-ill-formed-special-form src))
 
        (if supply?
-           (##compilation-ctx-supply-modules-add! sym)
-           (##compilation-ctx-demand-modules-add! sym)))
+           (##compilation-supply-modules-add! sym)
+           (##compilation-demand-modules-add! sym)))
 
      (##expand-source-template
       src
@@ -174,7 +174,7 @@
            (let ((attribs (##map ##desourcify rest)))
              (##for-each
               (lambda (attrib)
-                (##compilation-ctx-meta-info-add! key attrib))
+                (##compilation-meta-info-add! key attrib))
               attribs)
              (##expand-source-template
               src
@@ -350,6 +350,17 @@
                                    (if port
                                        (##close-port port))
                                    #t)))))))
+                   ((##eq? first 'compilation-target)
+                    (let ((fr (##sourcify feature-requirement src)))
+                      (##shape src fr -1)
+                      (let ((ct (##compilation-target)))
+                        (let loop ((lst (##cdr (##source-strip fr))))
+                          (and (##pair? lst)
+                               (let ((t (##desourcify (##car lst))))
+                                 (or (if (##equal? t '(_))
+                                         (##pair? ct)
+                                         (##equal? t ct))
+                                     (loop (##cdr lst)))))))))
                    (else
                     (macro-raise
                      (macro-make-expression-parsing-exception
@@ -3479,12 +3490,21 @@
                      (begin
                        (##close-port dir-port)
                        #f)
-                     (let ((result (del (##path-expand filename dir-path))))
-                       (if result
-                           (begin
-                             (##close-port dir-port)
-                             result)
-                           (loop))))))))
+                     (if (or (##string=? filename ".")
+                             (##string=? filename ".."))
+                         ;; it should never be the case that filename is
+                         ;; "." or ".." because of the use of the option
+                         ;; ignore-hidden: 'dot-and-dot-dot
+                         ;; but we double check anyway because it would
+                         ;; be very bad to recurse on "." and ".." if
+                         ;; there was a bug in ##open-directory-aux
+                         (loop)
+                         (let ((result (del (##path-expand filename dir-path))))
+                           (if result
+                               (begin
+                                 (##close-port dir-port)
+                                 result)
+                               (loop)))))))))
        open-directory
        (##list path: dir-path
                ignore-hidden: 'dot-and-dot-dot)))
@@ -3607,9 +3627,6 @@
 (define-runtime-syntax six.infix
   (lambda (src) (##deconstruct-call src 2 (lambda (expr) expr))))
 
-(define-runtime-syntax six.prefix
-  (lambda (src) (##deconstruct-call src 2 (lambda (expr) expr))))
-
 (define-runtime-macro (six.!x x)
   `(not ,x))
 
@@ -3701,20 +3718,22 @@
   `(bitwise-and ,x ,y))
 
 (define-prim (##infix-id x)
-  (if (##pair? x)
-      (let* ((first (##car x))
-             (rest (##cdr x)))
-        (if (and (or (##eq? first 'six.identifier)
-                     (##eq? first 'six.prefix))
-                 (##pair? rest))
-            (let* ((second (##car rest))
-                   (rest (##cdr rest)))
-              (if (and (##symbol? second)
-                       (##null? rest))
-                  second
-                  #f))
-            #f))
-      #f))
+  (cond ((##symbol? x)
+         x)
+        ((##pair? x)
+         (let* ((first (##car x))
+                (rest (##cdr x)))
+           (if (and (##eq? first 'six.identifier)
+                    (##pair? rest))
+               (let* ((second (##car rest))
+                      (rest (##cdr rest)))
+                 (if (and (##symbol? second)
+                          (##null? rest))
+                     second
+                     #f))
+               #f)))
+        (else
+         #f)))
 
 (define-runtime-macro (six.&x x)
   (##infix-lvalue-access
@@ -3737,89 +3756,101 @@
   (define (err)
     (##ill-formed-special-form form-name args))
 
-  (if (##pair? x)
-      (let* ((first (##car x))
-             (rest (##cdr x)))
-        (if (##pair? rest)
-            (let* ((second (##car rest))
-                   (rest (##cdr rest)))
-              (cond ((##pair? rest)
-                     (let* ((third (##car rest))
-                            (rest (##cdr rest)))
-                       (cond ((##not (##null? rest))
-                              (err))
-                             ((##eq? first 'six.index)
-                              (let* ((vect (##gensym))
-                                     (index (##gensym)))
-                                (cont (lambda (body)
-                                        `(let ((,vect ,second) (,index ,third))
-                                           ,body))
-                                      (lambda ()
-                                        `(vector-ref ,vect ,index))
-                                      (lambda ()
-                                        `(vector-ref ,second ,third))
-                                      (lambda (val)
-                                        `(vector-set! ,vect ,index ,val))
-                                      (lambda (val)
-                                        `(vector-set! ,second ,third ,val)))))
-                             ((and (or (##eq? first 'six.arrow)
-                                       (##eq? first 'six.dot))
-                                   (##infix-id third))
-                              =>
-                              (lambda (id)
-                                (let* ((struct (##gensym))
-                                       (mutator
-                                        (##string->symbol
-                                         (##string-append
-                                          (##symbol->string id)
-                                          "-set!"))))
-                                  (cont (lambda (body)
-                                          `(let ((,struct ,second))
-                                             ,body))
-                                        (lambda ()
-                                          `(,id ,struct))
-                                        (lambda ()
-                                          `(,id ,second))
-                                        (lambda (val)
-                                          `(,mutator ,struct ,val))
-                                        (lambda (val)
-                                          `(,mutator ,second ,val))))))
-                             (else
-                              (err)))))
-                    ((##null? rest)
-                     (cond ((##eq? first 'six.*x)
-                            (let ((ptr (##gensym)))
-                              (cont (lambda (body)
-                                      `(let ((,ptr ,second))
-                                         ,body))
-                                    (lambda ()
-                                      `(,ptr))
-                                    (lambda ()
-                                      `(,second))
-                                    (lambda (val)
-                                      `(,ptr ,val))
-                                    (lambda (val)
-                                      `(,second ,val)))))
-                           ((and (or (##eq? first 'six.identifier)
-                                     (##eq? first 'six.prefix))
-                                 (##symbol? second))
-                            (let ((var (##gensym)))
-                              (cont (lambda (body)
-                                      body)
-                                    (lambda ()
-                                      second)
-                                    (lambda ()
-                                      second)
-                                    (lambda (val)
-                                      `(set! ,second ,val))
-                                    (lambda (val)
-                                      `(set! ,second ,val)))))
-                           (else
-                            (err))))
-                    (else
-                     (err))))
-            (err)))
-      (err)))
+  (cond ((##symbol? x)
+         (let ((var (##gensym)))
+           (cont (lambda (body)
+                   body)
+                 (lambda ()
+                   x)
+                 (lambda ()
+                   x)
+                 (lambda (val)
+                   `(set! ,x ,val))
+                 (lambda (val)
+                   `(set! ,x ,val)))))
+        ((##pair? x)
+         (let* ((first (##car x))
+                (rest (##cdr x)))
+           (if (##pair? rest)
+               (let* ((second (##car rest))
+                      (rest (##cdr rest)))
+                 (cond ((##pair? rest)
+                        (let* ((third (##car rest))
+                               (rest (##cdr rest)))
+                          (cond ((##not (##null? rest))
+                                 (err))
+                                ((##eq? first 'six.index)
+                                 (let* ((vect (##gensym))
+                                        (index (##gensym)))
+                                   (cont (lambda (body)
+                                           `(let ((,vect ,second) (,index ,third))
+                                              ,body))
+                                         (lambda ()
+                                           `(vector-ref ,vect ,index))
+                                         (lambda ()
+                                           `(vector-ref ,second ,third))
+                                         (lambda (val)
+                                           `(vector-set! ,vect ,index ,val))
+                                         (lambda (val)
+                                           `(vector-set! ,second ,third ,val)))))
+                                ((and (or (##eq? first 'six.arrow)
+                                          (##eq? first 'six.dot))
+                                      (##infix-id third))
+                                 =>
+                                 (lambda (id)
+                                   (let* ((struct (##gensym))
+                                          (mutator
+                                           (##string->symbol
+                                            (##string-append
+                                             (##symbol->string id)
+                                             "-set!"))))
+                                     (cont (lambda (body)
+                                             `(let ((,struct ,second))
+                                                ,body))
+                                           (lambda ()
+                                             `(,id ,struct))
+                                           (lambda ()
+                                             `(,id ,second))
+                                           (lambda (val)
+                                             `(,mutator ,struct ,val))
+                                           (lambda (val)
+                                             `(,mutator ,second ,val))))))
+                                (else
+                                 (err)))))
+                       ((##null? rest)
+                        (cond ((##eq? first 'six.*x)
+                               (let ((ptr (##gensym)))
+                                 (cont (lambda (body)
+                                         `(let ((,ptr ,second))
+                                            ,body))
+                                       (lambda ()
+                                         `(,ptr))
+                                       (lambda ()
+                                         `(,second))
+                                       (lambda (val)
+                                         `(,ptr ,val))
+                                       (lambda (val)
+                                         `(,second ,val)))))
+                              ((and (##eq? first 'six.identifier)
+                                    (##symbol? second))
+                               (let ((var (##gensym)))
+                                 (cont (lambda (body)
+                                         body)
+                                       (lambda ()
+                                         second)
+                                       (lambda ()
+                                         second)
+                                       (lambda (val)
+                                         `(set! ,second ,val))
+                                       (lambda (val)
+                                         `(set! ,second ,val)))))
+                              (else
+                               (err))))
+                       (else
+                        (err))))
+               (err))))
+        (else
+         (err))))
 
 (define-prim (##infix-lvalue-fetch form)
   (##infix-lvalue-access

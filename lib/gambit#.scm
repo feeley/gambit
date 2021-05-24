@@ -131,9 +131,11 @@ cfun-conversion-exception-procedure
 cfun-conversion-exception?
 char-foldcase
 circular-list
+circular-list?
 clear-bit-field
 close-port
 command-line
+compilation-target
 compile-file
 compile-file-to-target
 condition-variable-broadcast!
@@ -193,6 +195,7 @@ display-procedure-environment
 divide-by-zero-exception-arguments
 divide-by-zero-exception-procedure
 divide-by-zero-exception?
+dotted-list?
 drop
 emergency-exit
 eof-object
@@ -459,6 +462,7 @@ keyword-hash
 keyword?
 last
 last-pair
+length+
 length-mismatch-exception-arg-id
 length-mismatch-exception-arguments
 length-mismatch-exception-procedure
@@ -539,6 +543,9 @@ nonprocedure-operator-exception-code
 nonprocedure-operator-exception-operator
 nonprocedure-operator-exception-rte
 nonprocedure-operator-exception?
+not-in-compilation-context-exception-arguments
+not-in-compilation-context-exception-procedure
+not-in-compilation-context-exception?
 number-of-arguments-limit-exception-arguments
 number-of-arguments-limit-exception-procedure
 number-of-arguments-limit-exception?
@@ -612,6 +619,7 @@ process-times
 processor-id
 processor?
 promise?
+proper-list?
 protocol-info
 protocol-info-aliases
 protocol-info-name
@@ -781,7 +789,6 @@ six.make-array
 six.new
 six.notx
 six.null
-six.prefix
 six.procedure
 six.procedure-body
 six.return
@@ -928,6 +935,7 @@ terminated-thread-exception-procedure
 terminated-thread-exception?
 test-bit-field?
 textual-port?
+thread
 thread-base-priority
 thread-base-priority-set!
 thread-group->thread-group-list

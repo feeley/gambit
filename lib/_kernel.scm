@@ -25,7 +25,20 @@
 #include "mem.h"
 #include "c_intf.h"
 
+#include "stamp-release.h"
 #include "stamp.h"
+
+#ifndef ___STAMP_VERSION
+#define ___STAMP_VERSION ___STAMP_RELEASE_VERSION
+#endif
+
+#ifndef ___STAMP_YMD
+#define ___STAMP_YMD ___STAMP_RELEASE_YMD
+#endif
+
+#ifndef ___STAMP_HMS
+#define ___STAMP_HMS ___STAMP_RELEASE_HMS
+#endif
 
 c-declare-end
 )
@@ -4256,6 +4269,29 @@ end-of-code
              nonnull-char-string
     "___os_bat_extension_string")))
 
+(define ##default-compile-options-string
+  (macro-case-target
+
+   ((C)
+    ((c-lambda () nonnull-UCS-2-string #<<end-of-code
+
+#ifndef ___DEFAULT_COMPILE_OPTIONS
+#define ___DEFAULT_COMPILE_OPTIONS {'\0'}
+#endif
+
+static ___UCS_2 default_compile_options[] = ___DEFAULT_COMPILE_OPTIONS;
+
+___return(default_compile_options);
+
+end-of-code
+)))
+
+   (else
+    "")))
+
+(define-prim (##default-compile-options-string-set! x)
+  (set! ##default-compile-options-string x))
+
 ;;;----------------------------------------------------------------------------
 
 ;;; Miscellaneous definitions.
@@ -4323,7 +4359,9 @@ end-of-code
 
     if (!___FIXNUMP(result))
     {
-      n = ___bytes_allocated (___PSPNC) - n;
+      ___F64 ba = ___bytes_allocated (___PSPNC);
+
+      n = ba - n;
 
       ___process_times (&user, &sys, &real);
       ___vm_stats (&minflt, &majflt);
@@ -4335,7 +4373,7 @@ end-of-code
       ___F64VECTORSET(result,___FIX(4),___vms->mem.gc_sys_time_)
       ___F64VECTORSET(result,___FIX(5),___vms->mem.gc_real_time_)
       ___F64VECTORSET(result,___FIX(6),___vms->mem.nb_gcs_)
-      ___F64VECTORSET(result,___FIX(7),___bytes_allocated (___PSPNC))
+      ___F64VECTORSET(result,___FIX(7),ba)
       ___F64VECTORSET(result,___FIX(8),(2*(1+2)<<___LWS))
       ___F64VECTORSET(result,___FIX(9),n)
       ___F64VECTORSET(result,___FIX(10),minflt)
@@ -5515,7 +5553,7 @@ end-of-code
 
 (define-prim (##collect-modules module-refs
                                 #!optional
-                                (level ##max-fixnum))
+                                (level 999999)) ;; init up to highest level
 
   (define visited '()) ;; modules visited to correctly handle circular deps
 

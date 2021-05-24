@@ -193,6 +193,9 @@
 (define-macro (^array-length expr)
   `(univ-emit-array-length ctx ,expr))
 
+(define-macro (^array-push! expr1 expr2)
+  `(univ-emit-array-push! ctx ,expr1 ,expr2))
+
 (define-macro (^array-shrink! expr1 expr2)
   `(univ-emit-array-shrink! ctx ,expr1 ,expr2))
 
@@ -588,6 +591,9 @@
 
 (define-macro (^member expr name)
   `(univ-emit-member ctx ,expr ,name))
+
+(define-macro (^field name expr)
+  `(univ-emit-field ctx ,name ,expr))
 
 (define-macro (^public name)
   `(univ-emit-public ctx ,name))
@@ -1215,3 +1221,6 @@
 
 (define-macro (^host-primitive? arg)
   `(univ-emit-host-primitive? ctx ,arg))
+
+(define-macro (^indent . code)
+  `(univ-emit-indent ctx ,@code))

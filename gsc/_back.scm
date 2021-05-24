@@ -82,6 +82,19 @@
 ;;              that should be used when generating GVM code for this
 ;;              target machine.
 ;;
+;; nb-arg-regs  Integer denoting the maximum number of procedure call
+;;              arguments that are passed in GVM registers.
+;;
+;; compactness  Integer denoting the level of compactness of the
+;;              generated code.  Levels from 0 to 5 cause the
+;;              generation of increasingly compact code with little or
+;;              no impact on execution speed.  Lower values tend to
+;;              make the generated code more humanly readable.  Above
+;;              a level of 5 the compiler will trade execution speed
+;;              for saving code space.  The detailed meaning of this
+;;              option depends on the target and some targets may
+;;              ignore it.
+;;
 ;; prim-info    Procedure (lambda (name) ...)
 ;;              This procedure is used to get information about the
 ;;              Scheme primitive procedures built into the system (not
@@ -109,10 +122,6 @@
 ;;              This value is the GVM register where the result of a
 ;;              procedure and task is returned.
 ;;
-;; task-return  GVM location.
-;;              This value is the GVM register where the task's return address
-;;              is passed.
-;;
 ;; switch-testable?  Function.
 ;;              This function tests whether an object can be tested
 ;;              in a GVM "switch" instruction.
@@ -138,11 +147,12 @@
                      semantics-preserving-options
                      extra)
 
-  (define current-target-version 12) ;; number for this version of the module
+  (define current-target-version 14) ;; number for this version of the module
 
   (define common-semantics-changing-options
     '((nb-gvm-regs fixnum)
-      (nb-arg-regs fixnum)))
+      (nb-arg-regs fixnum)
+      (compactness fixnum)))
 
   (define common-semantics-preserving-options
     '())
@@ -193,18 +203,18 @@
 (define (target-nb-regs-set! x y)           (vector-set! x 10 y))
 (define (target-nb-arg-regs x)              (vector-ref x 11))
 (define (target-nb-arg-regs-set! x y)       (vector-set! x 11 y))
-(define (target-prim-info x)                (vector-ref x 12))
-(define (target-prim-info-set! x y)         (vector-set! x 12 y))
-(define (target-label-info x)               (vector-ref x 13))
-(define (target-label-info-set! x y)        (vector-set! x 13 y))
-(define (target-jump-info x)                (vector-ref x 14))
-(define (target-jump-info-set! x y)         (vector-set! x 14 y))
-(define (target-frame-constraints x)        (vector-ref x 15))
-(define (target-frame-constraints-set! x y) (vector-set! x 15 y))
-(define (target-proc-result x)              (vector-ref x 16))
-(define (target-proc-result-set! x y)       (vector-set! x 16 y))
-(define (target-task-return x)              (vector-ref x 17))
-(define (target-task-return-set! x y)       (vector-set! x 17 y))
+(define (target-compactness x)              (vector-ref x 12))
+(define (target-compactness-set! x y)       (vector-set! x 12 y))
+(define (target-prim-info x)                (vector-ref x 13))
+(define (target-prim-info-set! x y)         (vector-set! x 13 y))
+(define (target-label-info x)               (vector-ref x 14))
+(define (target-label-info-set! x y)        (vector-set! x 14 y))
+(define (target-jump-info x)                (vector-ref x 15))
+(define (target-jump-info-set! x y)         (vector-set! x 15 y))
+(define (target-frame-constraints x)        (vector-ref x 16))
+(define (target-frame-constraints-set! x y) (vector-set! x 16 y))
+(define (target-proc-result x)              (vector-ref x 17))
+(define (target-proc-result-set! x y)       (vector-set! x 17 y))
 (define (target-switch-testable? x)         (vector-ref x 18))
 (define (target-switch-testable?-set! x y)  (vector-set! x 18 y))
 (define (target-eq-testable? x)             (vector-ref x 19))
@@ -312,7 +322,8 @@
                           (make-stk i)))
                 (location-of-parms (+ i 1)))))
 
-    (let ((x (cons (cons 'return 0) (location-of-parms 1))))
+    (let ((x (cons (cons 'return return-addr-reg)
+                   (location-of-parms 1))))
       (make-pcontext nb-stacked
                      (if closed?
                          (cons (cons 'closure-env
@@ -354,7 +365,7 @@
                 (location-of-args (+ i 1)))))
 
     (make-pcontext nb-stacked
-                   (cons (cons 'return (make-reg 0))
+                   (cons (cons 'return return-addr-reg)
                          (location-of-args 1)))))
 
 ;;; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -393,7 +404,6 @@
   (set! target.jump-info         (target-jump-info target))
   (set! target.frame-constraints (target-frame-constraints target))
   (set! target.proc-result       (target-proc-result target))
-  (set! target.task-return       (target-task-return target))
   (set! target.switch-testable?  (target-switch-testable? target))
   (set! target.eq-testable?      (target-eq-testable? target))
   (set! target.object-type       (target-object-type target))
@@ -456,7 +466,6 @@
 (define target.jump-info         #f)
 (define target.frame-constraints #f)
 (define target.proc-result       #f)
-(define target.task-return       #f)
 (define target.switch-testable?  #f)
 (define target.eq-testable?      #f)
 (define target.object-type       #f)

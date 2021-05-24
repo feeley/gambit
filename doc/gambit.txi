@@ -801,6 +801,7 @@ Synopsis:
 @b{}gsc @r{[}-:@r{@var{runtimeoption}},@dots{}@r{]} @r{[}-i@r{]} @r{[}-f@r{]} @r{[}-h@r{]} @r{[}-help@r{]} @r{[}-v@r{]}
     @r{[}-prelude @r{@var{expressions}}@r{]} @r{[}-postlude @r{@var{expressions}}@r{]}
     @r{[}-dynamic@r{]} @r{[}-exe@r{]} @r{[}-obj@r{]}
+    @r{[}-nb-gvm-regs @r{@var{n}}@r{]} @r{[}-nb-arg-regs @r{@var{n}}@r{]} @r{[}-compactness @r{@var{level}}@r{]}
     @r{[}-cc @r{@var{compiler}}@r{]} @r{[}-cc-options @r{@var{options}}@r{]}
     @r{[}-ld-options-prelude @r{@var{options}}@r{]} @r{[}-ld-options @r{@var{options}}@r{]}
     @r{[}-pkg-config @r{@var{pkg-config-args}}@r{]} @r{[}-pkg-config-path @r{@var{pkg-config-path}}@r{]}
@@ -961,6 +962,13 @@ by the module.
 Start REPL interaction.
 @item -e @var{expressions}
 Evaluate expressions in the interaction environment.
+@item -nb-gvm-regs @r{@var{n}}
+Specify the number of available Gambit virtual machine registers.
+@item -nb-arg-regs @r{@var{n}}
+Specify the number of procedure call parameters passed in Gambit virtual
+machine registers.
+@item -compactness @r{@var{level}}
+Specify the compactness of the generated code.
 @end table
 
 @opindex -i
@@ -1184,6 +1192,46 @@ The @samp{-} option starts a REPL interaction.
 @opindex -e
 The @samp{-e} option evaluates the specified expressions in the
 interaction environment.
+
+@opindex -nb-gvm-regs @var{n}
+The @samp{-nb-gvm-regs} option specifies the number of Gambit virtual
+machine registers that are available for the generated code.  The
+default number depends on configuration options and the target but it
+is typically 5.  All modules and the runtime library must be compiled
+with the same setting.  This option exists mainly for experimentation
+by the developers.  For example:
+
+@smallexample
+$ @b{gsc -nb-gvm-regs 10 -c bench.scm}
+@end smallexample
+
+@opindex -nb-arg-regs @var{n}
+The @samp{-nb-arg-regs} option specifies the number of procedure call
+parameters passed in Gambit virtual machine registers.  The default
+number depends on configuration options and the target but it is
+typically 3.  All modules and the runtime library must be compiled
+with the same setting.  This option exists mainly for experimentation
+by the developers.  For example:
+
+@smallexample
+$ @b{gsc -nb-arg-regs 2 -c bench.scm}
+@end smallexample
+
+@opindex -compactness @var{level}
+The @samp{-compactness} option selects the level of compactness of the
+generated code.  The default level depends on configuration options
+and the target but it is typically 5.  Levels from 0 to 5 cause the
+generation of increasingly compact code with little or no impact on
+execution speed.  Lower values tend to make the generated code more
+humanly readable.  Above a level of 5 the compiler will trade
+execution speed for saving code space.  The detailed meaning of this
+option depends on the target, some targets may ignore it and some
+targets may require all modules and the runtime library to be compiled
+with the same compactness level.  For example:
+
+@smallexample
+$ @b{gsc -target js -compactness 0 -c bench.scm}
+@end smallexample
 
 @node Link files, Procedures specific to compiler, GSC batch mode, GSC
 @section Link files
@@ -4063,6 +4111,79 @@ Gambit @value{VERSION}
 
 @end deffn
 
+@deffn procedure compilation-target
+
+This procedure can only be executed during the phase of the Scheme
+code's processing (@i{compilation}) that corresponds to macro
+expansion.  Calls to this procedure are typically contained in macro
+definitions but they can also be contained in procedures that are
+called from a macro definition's body directly or indirectly.
+
+The result returned by the @code{compilation-target} procedure
+gives an indication of the target language of the @i{compilation}.
+This can be used to write macros that depend on the type of @i{compilation}
+and the target language.
+
+When the result is the symbol @code{@var{T}} the macro expansion is in the
+context of compiling to the target language @code{@var{T}}, e.g. @code{C},
+@code{js}, etc.  When the result is a single element list @code{(@var{T})}
+the macro expansion is for the interpreter which itself was compiled
+for the target language @code{@var{T}}, e.g. @code{(C)}, @code{(js)}, etc.
+
+For example:
+
+@smallexample
+$ @b{cat ct.scm}
+(define (level-0)
+  (string-append "0: " (object->string (compilation-target))))
+
+(define-macro (test)
+
+  (define (level-1)
+    (string-append "1: " (object->string (compilation-target))))
+
+  (define-macro (level-2)
+    (string-append "2: " (object->string (compilation-target))))
+
+  `(list ,(level-1) ,(level-2)))
+
+(pp (test))
+
+(pp (level-0)) ;; run time exception
+$ @b{gsi ct.scm}
+("1: (C)" "2: (C)")
+*** ERROR IN level-0, "ct.scm"@@2.40 -- Not in compilation context
+(compilation-target)
+$ @b{gsc -target js -exe ct.scm}
+$ @b{./ct}
+("1: js" "2: (C)")
+*** ERROR IN level-0 -- Not in compilation context
+(compilation-target)
+@end smallexample
+
+Regardless of whether @samp{ct.scm} is being processed by the
+interpreter or the compiler, the body of the @code{level-0} procedure
+is not in a compilation context and in the body of the @code{level-2}
+macro the compilation target is @code{(C)} indicating that the macro
+expansion is being done for interpretation.
+
+During the execution of the @code{level-1} procedure, the
+compilation target will correspond to what is processing
+@samp{ct.scm} (interpreter or compiler).
+
+Note that the compilation target can also be tested by the
+@code{cond-expand} special form using a @i{feature requirement} of the
+form @code{(compilation-target @var{target})} with the special case
+@code{(compilation-target (_))} meaning the interpreter.
+
+@end deffn
+
+@deffn {special form} cond-expand @dots{}
+@end deffn
+
+@deffn {special form} define-cond-expand-feature @var{ident} @dots{}
+@end deffn
+
 @deffn {special form} declare @r{@i{declaration}}@dots{}
 
 This form introduces declarations to be used by the compiler
@@ -4705,7 +4826,7 @@ For example:
 @deffnx procedure output-port-char-position @var{port}
 @end deffn
 
-@deffn procedure open-event-queue @var{n}
+@deffn procedure open-event-queue @var{selector}
 @end deffn
 
 @deffn procedure main @dots{}
@@ -4728,12 +4849,6 @@ For example:
 @end deffn
 
 @deffn {special form} receive @dots{}
-@end deffn
-
-@deffn {special form} cond-expand @dots{}
-@end deffn
-
-@deffn {special form} define-cond-expand-feature @var{ident} @dots{}
 @end deffn
 
 @deffn {special form} case-lambda @dots{}
@@ -4793,7 +4908,6 @@ For example:
 @end deffn
 
 @deffn {special form} six.infix @var{datum}
-@deffnx {special form} six.prefix @var{datum}
 @deffnx undefined six.!
 @deffnx {special form} six.!x @var{x}
 @deffnx {special form} six.&x @var{x}
@@ -4850,7 +4964,7 @@ For example:
 @deffnx {special form} six.x++ @var{x}
 @deffnx {special form} six.x+=y @var{x} @var{y}
 @deffnx {special form} six.x+y @var{x} @var{y}
-@deffnx {special form} |six.x,y| @var{x} @var{y}
+@deffnx {special form} {|six.x,y|} @var{x} @var{y}
 @deffnx {special form} six.x-- @var{x}
 @deffnx {special form} six.x-=y @var{x} @var{y}
 @deffnx {special form} six.x-y @var{x} @var{y}
@@ -7958,6 +8072,23 @@ For example:
 
 @end deffn
 
+@deffn procedure thread @var{thunk}
+
+The @code{thread} procedure creates, starts and returns a new thread.
+The call @code{(thread @var{thunk})} is equivalent to
+@code{(thread-start! (make-thread @var{thunk}))}.
+
+For example:
+
+@smallexample
+> @b{(define a (thread (lambda () (expt 2 1005))))}
+> @b{(define b (thread (lambda () (expt 2 1000))))}
+> @b{(/ (thread-join! a) (thread-join! b))}
+32
+@end smallexample
+
+@end deffn
+
 @deffn procedure thread-name @var{thread}
 
 This procedure returns the name of the @var{thread}.  For example:
@@ -10188,6 +10319,41 @@ For example:
     handler
     (lambda () foo))}
 (variable= foo)
+@end smallexample
+
+@end deffn
+
+@deffn procedure not-in-compilation-context-exception? @var{obj}
+@deffnx procedure not-in-compilation-context-exception-procedure @var{exc}
+@deffnx procedure not-in-compilation-context-exception-arguments @var{exc}
+
+Not-in-compilation-context-exception objects are raised by the
+procedure @code{compilation-target} when it is executed outside of a
+compilation context.  The parameter @var{exc} must be a
+not-in-compilation-context-exception object.
+
+The procedure @code{not-in-compilation-context-exception?} returns
+@code{#t} when @var{obj} is a not-in-compilation-context-exception
+object and @code{#f} otherwise.
+
+The procedure @code{not-in-compilation-context-exception-procedure}
+returns the procedure that raised @var{exc}.
+
+The procedure @code{not-in-compilation-context-exception-arguments}
+returns the list of arguments of the procedure that raised @var{exc}.
+
+For example:
+
+@smallexample
+> @b{(define (handler exc)
+    (if (not-in-compilation-context-exception? exc)
+        (list (not-in-compilation-context-exception-procedure exc)
+              (not-in-compilation-context-exception-arguments exc))
+        'not-not-in-compilation-context-exception))}
+> @b{(with-exception-catcher
+    handler
+    (lambda () (compilation-target)))}
+(#<procedure #2 compilation-target> ())
 @end smallexample
 
 @end deffn
@@ -15774,19 +15940,26 @@ such as a closing parenthesis).  For example @code{(f \2*n (list)
 @item
 @meta{expr} @syntaxdef{}
 @item
-@syntaxspc{}@meta{expr21} @tab @var{$1}
+@syntaxspc{}@meta{expr22} @tab @var{$1}
+
+@item
+@meta{expr22} @syntaxdef{}
+@item
+@syntaxspc{}@meta{expr21} @code{:-} @meta{expr22} @tab @code{(six.x:-y @var{$1} @var{$3})}
+@item
+@syntaxbar{}@meta{expr21} @tab @var{$1}
 
 @item
 @meta{expr21} @syntaxdef{}
 @item
-@syntaxspc{}@meta{expr20} @code{:-} @meta{expr21} @tab @code{(six.x:-y @var{$1} @var{$3})}
+@syntaxspc{}@meta{expr21} @code{,} @meta{expr20} @tab @code{(|six.x,y| @var{$1} @var{$3})}
 @item
 @syntaxbar{}@meta{expr20} @tab @var{$1}
 
 @item
 @meta{expr20} @syntaxdef{}
 @item
-@syntaxspc{}@meta{expr20} @code{,} @meta{expr19} @tab @code{(|six.x,y| @var{$1} @var{$3})}
+@syntaxspc{}@code{yield} @meta{expr20} @tab @code{(six.yieldx @var{$2})}
 @item
 @syntaxbar{}@meta{expr19} @tab @var{$1}
 
@@ -15909,7 +16082,7 @@ such as a closing parenthesis).  For example @code{(f \2*n (list)
 @item
 @syntaxbar{}@meta{expr7} @code{==} @meta{expr6} @tab @code{(six.x==y @var{$1} @var{$3})}
 @item
-@syntaxspc{}@meta{expr7} @code{!==} @meta{expr6} @tab @code{(six.x!==y @var{$1} @var{$3})}
+@syntaxbar{}@meta{expr7} @code{!==} @meta{expr6} @tab @code{(six.x!==y @var{$1} @var{$3})}
 @item
 @syntaxbar{}@meta{expr7} @code{===} @meta{expr6} @tab @code{(six.x===y @var{$1} @var{$3})}
 @item
@@ -15929,6 +16102,8 @@ such as a closing parenthesis).  For example @code{(f \2*n (list)
 @syntaxbar{}@meta{expr6} @code{in} @meta{expr5} @tab @code{(six.xiny @var{$1} @var{$3})}
 @item
 @syntaxbar{}@meta{expr6} @code{is} @meta{expr5} @tab @code{(six.xisy @var{$1} @var{$3})}
+@item
+@syntaxbar{}@meta{expr6} @code{instanceof} @meta{expr5} @tab @code{(six.xinstanceofy @var{$1} @var{$3})}
 @item
 @syntaxbar{}@meta{expr5} @tab @var{$1}
 
@@ -15990,9 +16165,11 @@ such as a closing parenthesis).  For example @code{(f \2*n (list)
 @item
 @syntaxbar{}@code{~} @meta{expr2} @tab @code{(six.~x @var{$2})}
 @item
-@syntaxbar{}@code{new} @meta{id-or-prefix} @code{(} @meta{arguments} @code{)} @tab @code{(six.new @var{$2} . @var{$4})}
-@item
 @syntaxbar{}@meta{expr2} @code{**} @meta{expr1} @tab @code{(six.x**y @var{$1} @var{$3})}
+@item
+@syntaxbar{}@code{await} @meta{expr2} @tab @code{(six.awaitx @var{$2})}
+@item
+@syntaxbar{}@code{typeof} @meta{expr2} @tab @code{(six.typeofx @var{$2})}
 @item
 @syntaxbar{}@meta{expr1} @tab @var{$1}
 
@@ -16028,13 +16205,17 @@ such as a closing parenthesis).  For example @code{(f \2*n (list)
 @item
 @syntaxbar{}@code{(} @meta{block stat} @code{)} @tab @var{$2}
 @item
-@syntaxbar{}@meta{datum-starting-with-#-or-backquote}  @tab @code{(six.prefix @var{$1})}
+@syntaxbar{}@meta{datum-starting-with-#-or-backquote}  @tab @var{$1}
 @item
 @syntaxbar{}@code{[} @meta{elements} @code{]} @tab @var{$2}
 @item
 @syntaxbar{}@meta{type} @code{(} @meta{parameters} @code{)} @meta{body} @tab @code{(six.procedure @var{$1} @var{$3} @var{$5})}
 @item
 @syntaxbar{}@code{function} @code{(} @meta{parameters} @code{)} @meta{body} @tab @code{(six.procedure #f @var{$3} @var{$5})}
+@item
+@syntaxbar{}@code{new} @meta{id-or-prefix} @code{(} @meta{arguments} @code{)} @tab @code{(six.new @var{$2} . @var{$4})}
+@item
+@syntaxbar{}@code{async} @meta{expr0} @tab @code{(six.asyncx @var{$2})}
 
 @item
 @meta{block stat} @syntaxdef{}
@@ -16107,12 +16288,12 @@ such as a closing parenthesis).  For example @code{(f \2*n (list)
 @item
 @syntaxspc{}@meta{identifier} @tab @code{(six.identifier @var{$1})}
 @item
-@syntaxbar{}@code{\} @meta{datum} @tab @code{(six.prefix @var{$2})}
+@syntaxbar{}@code{\} @meta{datum} @tab @var{$2}
 
 @item
 @meta{type} @syntaxdef{}
 @item
-@syntaxbar{}@code{scmobj} @tab @code{scmobj}
+@syntaxspc{}@code{scmobj} @tab @code{scmobj}
 
 @end multitable
 
@@ -16176,7 +16357,7 @@ semantics of SIX:
 65536
 16777216
 4294967296
-> @b{\scmobj \make-adder(scmobj x) @{ scmobj (scmobj y) @{ x+y; @}; @}}
+> @b{\function \make-adder(x) @{ return function (y) @{ x+y; @}; @}}
 > @b{\map(new adder(100), [1,2,3,4])}
 (101 102 103 104)
 > @b{(map (make-adder 100) (list 1 2 3 4))}

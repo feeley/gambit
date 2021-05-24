@@ -230,8 +230,8 @@
         (cadr (assq 'target opts))
         (lambda ()
           (if script-line
-              (**compilation-ctx-meta-info-add! 'script-line script-line))
-          (**compilation-ctx-module-ref-set! module-ref)
+              (**compilation-meta-info-add! 'script-line script-line))
+          (**compilation-module-ref-set! module-ref)
           (parse-program
            program
            (make-global-environment)
@@ -1464,7 +1464,7 @@
               (make-reg i)
               (if (live-reg-var? reg0 live-v)
                 #f
-                (make-reg 0)))
+                return-addr-reg))
             (if (live-reg-var? (car rest) live-v)
               (loop (cdr rest) (+ i 1))
               (make-reg i))))))))
@@ -1472,7 +1472,7 @@
 (define (highest-dead-reg live)
   (let ((live-v (live-vars live)))
     (cond ((or (null? regs) (not (live-reg-var? (car regs) live-v)))
-           (make-reg 0))
+           return-addr-reg)
           ((< (length regs) target.nb-regs)
            (make-reg (- target.nb-regs 1)))
           (else
@@ -3262,13 +3262,20 @@
                    (if (or local-proc-info proc) #f oper)
                    in-reg))
                  (live-after
+                  (if (reason-tail? reason2)
+                      (varset-empty)
+                      live))
+                 (force-live
                   (if (and (reason-tail? reason2)
                            (optimize-dead-local-variables? (node-env node)))
                       (varset-empty)
-                      live))
+                      (list->varset
+                       (keep (lambda (var) (not (var-temp? var)))
+                             (varset->list live)))))
                  (live-vars-at-each-reg
                   (compute-live-vars-at-each-expr
                    live-after
+                   force-live
                    (map car eval-order)
                    (make-reason-tail)))
                  (return-lbl
@@ -3276,6 +3283,7 @@
                  (live-vars-at-each-slot
                   (compute-live-vars-at-each-expr
                    (car live-vars-at-each-reg)
+                   force-live
                    in-stk
                    reason2))
                  (where
@@ -3588,7 +3596,7 @@
                                     (current-frame
                                      (if return-lbl
                                          (let ((ret-v (make-temp-var 0)))
-                                           (put-var (make-reg 0) ret-v)
+                                           (put-var return-addr-reg ret-v)
                                            (varset-adjoin liv ret-v))
                                          liv))
                                     (node->comment node))))
@@ -3913,13 +3921,13 @@
               (remove-free-vars! (free-v (car best-arg)))
               (loop (remq best-arg args) (cons best-arg ordered-args)))))))))
 
-(define (compute-live-vars-at-each-expr live exprs reason)
+(define (compute-live-vars-at-each-expr live force-live exprs reason)
   (if (null? exprs)
     (list live)
     (let* ((live-vars-at-next-exprs
-             (compute-live-vars-at-each-expr live (cdr exprs) reason))
+             (compute-live-vars-at-each-expr live force-live (cdr exprs) reason))
            (live-after
-             (car live-vars-at-next-exprs)))
+            (varset-union force-live (car live-vars-at-next-exprs))))
       (cond ((not (car exprs))
              (cons live-after
                    live-vars-at-next-exprs))
@@ -4019,7 +4027,9 @@
             (let* ((var (car vars*))
                    (val (var->val var))
                    (needed (vals-live-vars liv (map var->val (cdr vars*)))))
-              (if (var-useless? var)
+              (if (and (var-useless? var)
+                       (or (var-temp? var)
+                           (optimize-dead-local-variables? (node-env node))))
                 (gen-node val needed (make-reason-side))
                 (save-val (gen-node val
                                     needed
@@ -4155,7 +4165,7 @@
 
       ; move return address to where task expects it
       (save-opnd-to-reg (make-lbl return-lbl)
-                        target.task-return
+                        return-addr-reg
                         ret-var*
                         (varset-remove live-starting-task ret-var*)
                         (node->comment node))
