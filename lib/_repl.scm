@@ -4543,11 +4543,14 @@
               #f  ;; run in current directory
               add-vars)))
 
-        (if (##fx= exit-status 0)
-            (##void)
-            (##raise-error-exception
-             "failed to display the document"
-             args))))))
+        (cond ((##fx= exit-status 0)
+               #t)
+              ((##fx= exit-status (##arithmetic-shift 1 8))
+               #f)
+              (else
+               (##raise-error-exception
+                "failed to display the document"
+                args)))))))
 
 (define (##gambdoc-set! x)
   (set! ##gambdoc x))
@@ -4565,11 +4568,13 @@
                           (else             (##string c))))
                   (##string->list str))))
 
-(define-prim (##show-help prefix subject)
-  (##gambdoc "help"
-             subject
-             (##help-browser)
-             (##escape-link (##string-append prefix subject))))
+(define-prim (##show-help entry index)
+  (let ((found? (##gambdoc "help" entry index (##help-browser))))
+    (unless found?
+      (display "*** No help found for ")
+      (display entry)
+      (newline))
+    (values)))
 
 (define ##help-browser
   (##make-parameter
@@ -4581,16 +4586,15 @@
 (define help-browser
   ##help-browser)
 
-(define-prim (##show-definition-of subject)
-  (let ((s
-         (cond ((##procedure? subject)
-                (##object->string (##procedure-name subject)))
-               (else
-                (##object->string subject)))))
-    (##show-help "Definition of " s)))
+(define-prim (##show-help-for-procedure proc)
+  (##show-help (if (##string? proc) proc
+                   (##object->string (if (##procedure? proc)
+                                         (##procedure-name proc)
+                                         proc)))
+               "fn"))
 
-(define-prim (##default-help subject)
-  (##show-definition-of subject))
+(define-prim (##default-help proc)
+  (##show-help-for-procedure proc))
 
 (define ##help-hook ##default-help)
 
